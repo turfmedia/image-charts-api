@@ -9,10 +9,61 @@ import (
 	"strings"
 	"time"
 
+	"github.com/patrickmn/go-cache"
+
 	"github.com/labstack/echo/v4"
 	"github.com/rs/zerolog"
 	"github.com/turfmedia/go-charts/v2"
 	"github.com/ziflex/lecho/v3"
+)
+
+var (
+	gocacheClient = cache.New(5*time.Minute, 10*time.Minute)
+	imageType     = "png"
+	pfTheme       = charts.ThemeOption{
+		IsDarkMode: false,
+		BackgroundColor: charts.Color{
+			R: 255,
+			G: 255,
+			B: 255,
+			A: 0,
+		},
+		TextColor: charts.Color{
+			R: 0,
+			G: 0,
+			B: 0,
+			A: 109,
+		},
+
+		AxisSplitLineColor: charts.Color{
+			R: 0,
+			G: 0,
+			B: 0,
+			A: 20,
+		},
+
+		AxisStrokeColor: charts.Color{
+			R: 0,
+			G: 0,
+			B: 0,
+			A: 50,
+		},
+
+		SeriesColors: []charts.Color{
+			{
+				R: 13,
+				G: 136,
+				B: 0,
+				A: 255,
+			},
+			{
+				R: 255,
+				G: 111,
+				B: 0,
+				A: 255,
+			},
+		},
+	}
 )
 
 func writeFile(buf []byte) error {
@@ -39,6 +90,22 @@ func drawText(p *charts.Painter, text string) *charts.Painter {
 // https://chart.apis.google.com/chart?cht=r&chs=225x225&chd=t:69.12,77,58,61.5,72|-1,-1,-1,-1,72,73,85,50,69.12|-1,-1,-1,-1,-1,-1,68&chco=0D8800,FF6F00,0000FF&chxt=x&chxl=0:|note|mus|reg|ent|pab|jock|dist|sais&chm=t66,33333375,2,6,40,,lt:32:14|B,FF6F0040,1,1,0|B,0D880060,0,1,0|h,BBBBBB44,0,0.1,1|h,CCCCCC44,0,0.2,1|h,CCCCCC44,0,0.3,1|h,CCCCCC44,0,0.4,1|h,99999944,0,0.5,1|h,BBBBBB44,0,0.6,1|h,BBBBBB44,0,0.7,1|h,BBBBBB44,0,0.8,1|h,BBBBBB44,0,0.9,1|h,CCCCCC,0,1,1&chls=1.0
 
 func generateRadarChart(c echo.Context) error {
+
+	// set a key based on URL params
+	cacheKey := c.QueryString()
+
+	imageInt, found := gocacheClient.Get(cacheKey)
+
+	if found {
+		image := imageInt.([]byte)
+		c.Response().Header().Set(echo.HeaderContentType, "image/png")
+		c.Response().Header().Set(echo.HeaderContentLength, strconv.Itoa(len(image)))
+		if _, err := c.Response().Write(image); err != nil {
+			// Handle error properly
+			return c.String(http.StatusInternalServerError, "Failed to send chart image")
+		}
+		return c.NoContent(http.StatusOK)
+	}
 
 	// Extract parameters from the query string
 	chartType := c.QueryParam("cht")
@@ -101,9 +168,6 @@ func generateRadarChart(c echo.Context) error {
 	// note is the first value of the first series rounded to int
 	note := int(dataSeries[0][0])
 
-	// Parse colors
-	// colors := strings.Split(colorString, ",")
-
 	// Parse axis labels
 	// Assuming axisLabelsString format is "0:|label1|label2|label3"
 	_, axisLabelsPart := strings.SplitN(axisLabelsString, ":", 2)[0], strings.SplitN(axisLabelsString, ":", 2)[1]
@@ -112,23 +176,6 @@ func generateRadarChart(c echo.Context) error {
 	// trim the first element
 	axisLabels = axisLabels[1:]
 
-	// Generate radar chart
-	// radar := charts.NewRadar()
-	// radar.SetGlobalOptions(
-	// 	charts.WithTitleOpts(opts.Title{Title: "Custom Radar Chart"}),
-	// 	charts.WithRadarComponentOpts(opts.RadarComponent{
-	// 		Indicator: generateRadarIndicators(axisLabels),
-	// 		Shape:     "circle",
-	// 	}),
-	// )
-
-	// for i, series := range dataSeries {
-	// 	radar.AddSeries("Series "+strconv.Itoa(i+1), generateRadarData(series), charts.WithLineStyleOpts(opts.LineStyle{
-	// 		Color: colors[i%len(colors)],
-	// 	}))
-	// }
-
-	imageType := "png"
 	imageOption := charts.PNGTypeOption()
 
 	if imageType == "png" {
@@ -136,15 +183,6 @@ func generateRadarChart(c echo.Context) error {
 	} else if imageType == "svg" {
 		imageOption = charts.SVGTypeOption()
 	}
-
-	// values := [][]float64{
-	// 	{
-	// 		69.12, 77, 58, 61.5, 72,
-	// 	},
-	// 	{
-	// 		69.12, -1, -1, -1, 72, 73, 85, 50, 69.12,
-	// 	},
-	// }
 
 	seriesList := make(charts.SeriesList, len(dataSeries))
 	for index, series := range dataSeries {
@@ -178,53 +216,6 @@ func generateRadarChart(c echo.Context) error {
 			},
 		}
 	}
-
-	pfTheme := charts.ThemeOption{
-		IsDarkMode: false,
-		BackgroundColor: charts.Color{
-			R: 255,
-			G: 255,
-			B: 255,
-			A: 0,
-		},
-		TextColor: charts.Color{
-			R: 0,
-			G: 0,
-			B: 0,
-			A: 109,
-		},
-
-		AxisSplitLineColor: charts.Color{
-			R: 0,
-			G: 0,
-			B: 0,
-			A: 20,
-		},
-
-		AxisStrokeColor: charts.Color{
-			R: 0,
-			G: 0,
-			B: 0,
-			A: 50,
-		},
-
-		SeriesColors: []charts.Color{
-			{
-				R: 13,
-				G: 136,
-				B: 0,
-				A: 255,
-			},
-			{
-				R: 255,
-				G: 111,
-				B: 0,
-				A: 255,
-			},
-		},
-	}
-
-	charts.AddTheme("pf", pfTheme)
 
 	p, err := charts.Render(charts.ChartOption{
 		SeriesList:      seriesList,
@@ -274,11 +265,16 @@ func generateRadarChart(c echo.Context) error {
 		return c.String(http.StatusInternalServerError, "Failed to send chart image")
 	}
 
-	return c.NoContent(http.StatusOK)
+	gocacheClient.Set(cacheKey, []byte(buf), cache.DefaultExpiration)
+
+	// return c.NoContent(http.StatusOK)
+	return nil
 }
 
 func main() {
 	buildInfo, _ := debug.ReadBuildInfo()
+
+	charts.AddTheme("pf", pfTheme)
 
 	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339}).
 		Level(zerolog.TraceLevel).
