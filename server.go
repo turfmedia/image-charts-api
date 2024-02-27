@@ -100,6 +100,7 @@ func generateRadarChart(c echo.Context) error {
 		image := imageInt.([]byte)
 		c.Response().Header().Set(echo.HeaderContentType, "image/png")
 		c.Response().Header().Set(echo.HeaderContentLength, strconv.Itoa(len(image)))
+		c.Response().Header().Set("Cache-Control", "public, max-age=3600")
 		if _, err := c.Response().Write(image); err != nil {
 			// Handle error properly
 			return c.String(http.StatusInternalServerError, "Failed to send chart image")
@@ -260,6 +261,7 @@ func generateRadarChart(c echo.Context) error {
 
 	c.Response().Header().Set(echo.HeaderContentType, "image/png")
 	c.Response().Header().Set(echo.HeaderContentLength, strconv.Itoa(len(buf)))
+	c.Response().Header().Set("Cache-Control", "public, max-age=3600")
 	if _, err := c.Response().Write(buf); err != nil {
 		// Handle error properly
 		return c.String(http.StatusInternalServerError, "Failed to send chart image")
